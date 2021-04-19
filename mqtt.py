@@ -26,15 +26,18 @@ def initializeClient():
 
 def cleanup():
     global theClient
+
+    # delay to make sure mqtt messages are published
+    time.sleep(2)
     if (theClient):
         theClient.loop_stop()
 
-def publish(payloads):
+def publish(payloads, topic="project/doughboy"):
     global theClient
     if (theClient == 0):
         initializeClient()
     
-    theClient.publish("project/doughboy", payloads)
+    theClient.publish(topic, payloads)
     
 if __name__ == "__main__":
 
@@ -42,6 +45,4 @@ if __name__ == "__main__":
     payload = {"curTemp":70}
     publish(json.dumps(payload))
 
-    LOGGER.info("sleeping 3 secs before cleanup")
-    time.sleep(3)
     cleanup()
