@@ -1,20 +1,24 @@
 import paho.mqtt.client as mqtt
 import json
 import time
+import logging
+from dotenv import dotenv_values
 
 theClient = 0
+LOGGER = logging.getLogger(__name__)
 
 def on_connect(client, userdata, flags, rc):
-    print("MQTT Client connection result: " + mqtt.connack_string(rc))
+    LOGGER.info("MQTT Client connection result: " + mqtt.connack_string(rc))
 
 def on_disconnect(client, userdata, rc):
     if rc != 0:
-        print("MQTT Client disconnected!")
+        LOGGER.error("MQTT Client disconnected!")
 
 def initializeClient():
     global theClient
     theClient = mqtt.Client("doughboy")
-    theClient.username_pw_set("someusername", "somepassword")
+    config = dotenv_values(".env")
+    theClient.username_pw_set(config["MQTT_USERNAME"], config["MQTT_PASSWORD"])
     theClient.on_connect = on_connect
     theClient.on_disconnect = on_disconnect
     theClient.connect("myvault.localdomain")
@@ -34,10 +38,10 @@ def publish(payloads):
     
 if __name__ == "__main__":
 
-    print("testing mqtt client code - pushing a temp")
+    LOGGER.info("testing mqtt client code - pushing a temp")
     payload = {"curTemp":70}
     publish(json.dumps(payload))
 
-    print("sleeping 3 secs before cleanup")
+    LOGGER.info("sleeping 3 secs before cleanup")
     time.sleep(3)
     cleanup()
