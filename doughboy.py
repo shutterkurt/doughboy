@@ -5,7 +5,7 @@ import sensor
 import mqtt
 
 import json
-import time, math
+import time, math, os
 import signal
 import sys
 import logging, logging.config
@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 class Controller:
 
-    def __init__(self):
+    def configure(self):
         config = configparser.ConfigParser()
         config.read("doughboy.ini")
         log.debug("=======================================================")
@@ -40,22 +40,25 @@ class Controller:
         self.minLevel = (3 * 100) / (10 * self.pwmPeriod)
         log.debug(f"min level ({self.minLevel})")
         
-        # keep track of number of relay on-off switches for the session
-        # then print out when done
-        self.relayCycles = 0
-        self.relayState = "Off"
-        self.startTime = time.time()
-
         # create the PID controller:
         kP = config["CONTROL"].getfloat("kP")
         kI = config["CONTROL"].getfloat("kI")
         kD = config["CONTROL"].getfloat("kD")
-        self.pid = PID(kP, kI, kD, self.setPoint)
-        #self.pid.sample_time = self.pwmPeriod - 1   #make sure it runs when called at pwmPeriod
+        self.pid.tunings = (kP, kI, kD)
+        log.debug(f"pid tunings ({self.pid.tunings})")
+        self.pid.setpoint = self.setPoint
         self.pid.output_limits = (0, 10)
         self.pid.auto_mode = True
         # can't turn this on till we have proper constants! otherwise delta input T ~0
-        #self.pid.proportional_on_measurement = True
+        self.pid.proportional_on_measurement = True
+
+    def checkIniFileChange(self):
+        stamp = os.stat("doughboy.ini").st_mtime
+        if (stamp != self.iniFileStamp):
+            log.debug(f"ini file changed ({stamp}) configure from ini file")
+            self.iniFileStamp = stamp
+            # configure from the ini file
+            self.configure()
 
     def turnOn(self):
         log.debug("turning on...")
@@ -72,6 +75,24 @@ class Controller:
             self.relayState="Off"
         # THINK: avoid an mqtt message by listening to plug state?
         mqtt.publish("Off", self.topicPlugCommand)
+
+    def __init__(self):
+
+        # create the PID loop
+        self.pid = PID()
+
+        # keep track of number of relay on-off switches for the session
+        # then print out when done
+        self.relayCycles = 0
+        self.relayState = "Off"
+        self.startTime = time.time()
+
+        #check ini file change - should always change here
+        self.iniFileStamp = 0
+        self.checkIniFileChange()
+
+        # start with relay known to be off:
+        self.turnOff("initial state = OFF")
 
     def cleanup(self):
         log.info("cleaning up...")
@@ -124,8 +145,16 @@ class Controller:
             
             return level
 
+    async def watchIniFile(self):
+        # poll for ini file changes
+        while True:
+            self.checkIniFileChange()
+            await trio.sleep(self.pwmPeriod)
+
     async def controlLoop(self, nursery):
         log.info("starting control loop...")
+
+        prevTemp = None
 
         ui.cls()
         print('Press Ctrl-C to stop...')
@@ -135,7 +164,10 @@ class Controller:
             
             #get new current temperature
             newTemp = sensor.tempF()
-            log.info("curTemp= " + str(newTemp))
+            if prevTemp==None:
+                prevTemp = newTemp
+            log.info(f"curTemp= ({newTemp}) delta ({newTemp-prevTemp}) error ({self.setPoint - newTemp})")
+            prevTemp = newTemp
 
             # call the pid to get new power level & set the output accordingly
             level = self.pid2level(self.pid(newTemp))
@@ -168,12 +200,12 @@ class Controller:
             
             await self.sleepFor(self.pwmPeriod)
 
-
     async def main(self):
         log.debug("starting main...")
         async with trio.open_nursery() as nursery:
             log.info("spawning loop")
             nursery.start_soon(self.controlLoop, nursery)
+            nursery.start_soon(self.watchIniFile)
     
     def run(self):
         try:
