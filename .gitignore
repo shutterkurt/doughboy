@@ -63,6 +63,8 @@ pytestdebug.log
 
 # Django stuff:
 *.log
+*.log.1
+*.log.2
 local_settings.py
 db.sqlite3
 db.sqlite3-journal

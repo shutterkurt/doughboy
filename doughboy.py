@@ -47,7 +47,8 @@ class Controller:
         self.pid.tunings = (kP, kI, kD)
         log.debug(f"pid tunings ({self.pid.tunings})")
         self.pid.setpoint = self.setPoint
-        self.pid.output_limits = (0, 10)
+        # FIXME: need to fix the pid library - clips I but not overall in POM mode
+        # self.pid.output_limits = (0, 10)
         self.pid.auto_mode = True
         # can't turn this on till we have proper constants! otherwise delta input T ~0
         self.pid.proportional_on_measurement = True
@@ -129,21 +130,20 @@ class Controller:
                 nursery.start_soon(self.turnOffLater,level)
     
     def pid2level(self, pidOutput):
-        # pid outputs a float clamped to 0-10
-        if (pidOutput==0):
-            return 0
-        elif (pidOutput==10):
-            return 10
+        # clamp to range 0-10
+        if (pidOutput <= 0):
+            level = 0
+        elif (pidOutput >= 10):
+            level = 10
         else:
             # otherwise create one decimal place, rounding up
             level = int(10*pidOutput + 5) / 10
             # level can't be lower than time it takes for ui to redraw
             # (till i fix that)
-            # so lets say it can't be lower than 3 seconds
             if (level < self.minLevel):
                 level = 0
-            
-            return level
+        log.debug(f"pid2level pidOutput({pidOutput}) level ({level})")
+        return level
 
     async def watchIniFile(self):
         # poll for ini file changes
