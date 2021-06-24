@@ -33,13 +33,8 @@ class Controller:
         self.pid.tunings = (kP, kI, kD)
         _log.debug(f"pid tunings ({self.pid.tunings})")
         self.pid.setpoint = self.setPoint
-        # FIXME: need to fix the pid library - clips I but not overall in POM mode
-        # self.pid.output_limits = (0, 10)
-        self.pid.auto_mode = True
-        # can't turn this on till we have proper constants! otherwise delta input T ~0
-        self.pid.proportional_on_measurement = True
 
-    def turnOn(self):
+    def _turnOn(self):
         _log.debug("turning on...")
         if (self.relayState!="On"):
             self.relayCycles+=1
@@ -47,7 +42,7 @@ class Controller:
         # THINK: avoid an mqtt message by listening to plug state?
         mqtt.publish("On", self.topicPlugCommand)
 
-    def turnOff(self, reason="none"):
+    def _turnOff(self, reason="none"):
         _log.debug(f'turning off ({reason})...')
         if (self.relayState!="Off"):
             self.relayCycles+=1
@@ -59,6 +54,11 @@ class Controller:
 
         # create the PID loop
         self.pid = PID()
+        # FIXME: need to fix the pid library - clips I but not overall in POM mode
+        # self.pid.output_limits = (0, 10)
+        # can't turn this on till we have proper constants! otherwise delta input T ~0
+        self.pid.proportional_on_measurement = True
+
 
         # keep track of number of relay on-off switches for the session
         # then print out when done
@@ -69,12 +69,23 @@ class Controller:
         # configure from config dictionary
         self.configure(config)
 
-        # start with relay known to be off:
-        self.turnOff("initial state = OFF")
+        # start with PID & relay known to be off:
+        self.pid.auto_mode = False
+        self._turnOff("initial state = OFF")
+
+    @property
+    def enable(self):
+        """Enable the PID"""
+        return self.pid.auto_mode
+
+    @ enable.setter
+    def enable(self, enable):
+        self.pid.auto_mode = enable
+
 
     def cleanup(self):
         _log.info("cleaning up...")
-        self.turnOff("cleanup")
+        self._turnOff("cleanup")
         elapsedHours = (time.time() - self.startTime)/(3600)
         _log.info(f"session relay cycles ({self.relayCycles}) over ({elapsedHours}) hours")
         _log.info(f"cycles per hour ({self.relayCycles/elapsedHours})")
@@ -95,14 +106,14 @@ class Controller:
         sleepTime = 10 * level * self.pwmPeriod / 100
         _log.debug(f'turnOffLater: level ({level}) period ({self.pwmPeriod}) sleeptime ({sleepTime})')
         await self.sleepFor(sleepTime)
-        self.turnOff("turnOffLater")
+        self._turnOff("turnOffLater")
 
     def setPower(self, level, nursery):
         _log.info(f'setting power to ({level})')
         if (level == 0):
-            self.turnOff("setPower")
+            self._turnOff("setPower")
         else:
-            self.turnOn()
+            self._turnOn()
             if (level != 10):
                 nursery.start_soon(self.turnOffLater,level)
     
@@ -143,12 +154,15 @@ class Controller:
 
             # call the pid to get new power level & set the output accordingly
             level = self.pid2level(self.pid(newTemp))
-            _log.debug(f'pid output level ({level})')
             curP, curI, curD = self.pid.components
             _log.debug(f'pid components ({curP} {curI} {curD})')
 
-            # level = 0
+            # set power if enabled
+            if self.pid.auto_mode==False:
+                level = 0
+
             self.setPower(level, nursery)
+            _log.debug(f'pid output level ({level})')
 
             # update the screen
             # FIXME: look into why updateScreen takes ~2 seconds!!
@@ -160,6 +174,7 @@ class Controller:
 
             # publish the payload
             payload = {
+                "enabled": int(self.pid.auto_mode == True),
                 "curTemp": newTemp,
                 "setPoint": self.setPoint,
                 "level": level*10,   # to give percent power, not tenths power

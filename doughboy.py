@@ -7,6 +7,8 @@ import trio
 import configparser
 from dough_controller import Controller
 
+# FIXME: need to get proper paths for these config/ini files!
+
 logging.config.fileConfig(fname="logging.conf", disable_existing_loggers=False)
 log = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ def readIni():
 
     return config
 
-def checkIniFileChange(controller):
+def checkIniFileChange(controller:Controller):
     global _iniFileStamp
     stamp = os.stat(_INI_FILENAME).st_mtime
     if (stamp != _iniFileStamp):
@@ -40,20 +42,21 @@ def checkIniFileChange(controller):
         # configure from the ini file
         controller.configure(readIni())
 
-async def watchIniFile(controller):
+async def watchIniFile(controller:Controller):
     # poll for ini file changes
     while True:
         checkIniFileChange(controller)
         await trio.sleep(30)
 
-async def main(controller):
+async def main(controller:Controller):
     log.debug("starting controller main...")
+    controller.enable = True
     async with trio.open_nursery() as nursery:
         log.info("spawning loop")
         nursery.start_soon(controller.controlLoop, nursery)
         nursery.start_soon(watchIniFile, controller)
 
-def run(controller):
+def run(controller:Controller):
     try:
         trio.run(main, controller)
     except KeyboardInterrupt as exc:

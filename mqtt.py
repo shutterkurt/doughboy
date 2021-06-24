@@ -14,6 +14,11 @@ def on_disconnect(client, userdata, rc):
     if rc != 0:
         LOGGER.error("MQTT Client disconnected!")
 
+# FIXME: use something like this to get the path of the .env file!
+# FIXME: then add error logic to complain if not found
+# from pathlib import Path
+# parent = Path(__file__).resolve().parent
+
 def initializeClient():
     global theClient
     theClient = mqtt.Client("doughboy")
