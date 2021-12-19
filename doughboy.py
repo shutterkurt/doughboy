@@ -22,6 +22,9 @@ def readIni():
     log.debug("=======================================================")
     config = {
         "pwmPeriod" : parser["CONTROL"].getfloat("pwmPeriod"),
+        "preheatCycles": parser["CONTROL"].getfloat("preheatCycles"),
+        "preheatThreshold": parser["CONTROL"].getfloat("preheatThreshold"),
+        "preheatPowerLevel": parser["CONTROL"].getfloat("preheatPowerLevel"),
         "setPoint" : parser["CONTROL"].getfloat("setPoint"),
         "topicStatus" : parser["CONTROL"].get("topicStatus"),
         "topicPlugCommand" : parser["CONTROL"].get("topicPlugCommand"),

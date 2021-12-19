@@ -26,7 +26,7 @@ def initializeClient():
     theClient.username_pw_set(config["MQTT_USERNAME"], config["MQTT_PASSWORD"])
     theClient.on_connect = on_connect
     theClient.on_disconnect = on_disconnect
-    theClient.connect("myvault.localdomain")
+    theClient.connect("mummy.localdomain")
     theClient.loop_start()
 
 def cleanup():

@@ -14,7 +14,12 @@ _log = logging.getLogger(__name__)
 class Controller:
 
     def configure(self, config):
+        self.config = config
+
         self.pwmPeriod = config["pwmPeriod"]
+        self.preheatCycles = config["preheatCycles"]
+        self.preheatThreshold = config["preheatThreshold"]
+        self.preheatPowerLevel = config["preheatPowerLevel"]
         self.setPoint = config["setPoint"]
         self.topicStatus = config["topicStatus"]
         self.topicPlugCommand = config["topicPlugCommand"]
@@ -73,13 +78,19 @@ class Controller:
         self.pid.auto_mode = False
         self._turnOff("initial state = OFF")
 
+        # number of control loop cycles - for preheating
+        self.cycleNum = 0
+
     @property
     def enable(self):
         """Enable the PID"""
         return self.pid.auto_mode
 
     @ enable.setter
-    def enable(self, enable):
+    def enable(self, enable:bool):
+        # if off -> on, then reset the cycleNum
+        if ((self.pid.auto_mode == False) and (enable == True)):
+            self.cycleNum = 0
         self.pid.auto_mode = enable
 
 
@@ -87,8 +98,10 @@ class Controller:
         _log.info("cleaning up...")
         self._turnOff("cleanup")
         elapsedHours = (time.time() - self.startTime)/(3600)
+        elapsedHours = round(elapsedHours,3)
         _log.info(f"session relay cycles ({self.relayCycles}) over ({elapsedHours}) hours")
-        _log.info(f"cycles per hour ({self.relayCycles/elapsedHours})")
+        cyclesPerHour = round(self.relayCycles/elapsedHours,3)
+        _log.info(f"cycles per hour ({cyclesPerHour})")
         mqtt.cleanup()
 
     async def sleepFor(self, rawTime):
@@ -144,12 +157,16 @@ class Controller:
         while True:
             # keep track of how long all of this takes
             self.start = trio.current_time()
+
+            self.cycleNum += 1
             
             #get new current temperature
             newTemp = sensor.tempF()
             if prevTemp==None:
                 prevTemp = newTemp
-            _log.info(f"curTemp= ({newTemp}) delta ({newTemp-prevTemp}) error ({self.setPoint - newTemp})")
+            deltaTemp = round(newTemp-prevTemp,4)
+            errorTemp = round(self.setPoint - newTemp,4)
+            _log.info(f"{self.cycleNum}: curTemp= ({newTemp}) delta ({deltaTemp}) error ({errorTemp})")
             prevTemp = newTemp
 
             # call the pid to get new power level & set the output accordingly
@@ -160,6 +177,11 @@ class Controller:
             # set power if enabled
             if self.pid.auto_mode==False:
                 level = 0
+            elif (self.cycleNum < self.preheatCycles) and ((self.setPoint - newTemp) > self.preheatThreshold):
+                # override the output for preheating the heating pad
+                # if not already 'close' to the setpoint
+                _log.debug(f'preheating ({self.cycleNum}:{self.preheatCycles})')
+                level = self.preheatPowerLevel
 
             self.setPower(level, nursery)
             _log.debug(f'pid output level ({level})')

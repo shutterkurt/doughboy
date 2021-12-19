@@ -8,7 +8,10 @@ import time
 
 i2c = busio.I2C(board.SCL, board.SDA)
 topSensor = adafruit_shtc3.SHTC3(i2c)
-botSensor = adafruit_sht31d.SHT31D(i2c)
+# FIXME: need to handle number of sensors in a generic way
+# currently this class does NOT handle this correctly!!!
+# raises exceptions
+# botSensor = adafruit_sht31d.SHT31D(i2c) or None
 
 # number of samples to average during calibration
 _CALIBRATION_SAMPLES = 15
