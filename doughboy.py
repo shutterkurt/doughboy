@@ -30,7 +30,9 @@ def readIni():
         "topicPlugCommand" : parser["CONTROL"].get("topicPlugCommand"),
         "kP" : parser["CONTROL"].getfloat("kP"),
         "kI" : parser["CONTROL"].getfloat("kI"),
-        "kD" : parser["CONTROL"].getfloat("kD")
+        "kD" : parser["CONTROL"].getfloat("kD"),
+        "enable" : parser["CONTROL"].getboolean("enable"),
+        "preheatAutoEnablePidAfter" : parser["CONTROL"].getboolean("preheatAutoEnablePidAfter")
     }
     log.debug("read ini file: " + json.dumps(config, indent=2, sort_keys=True))
 
@@ -53,7 +55,6 @@ async def watchIniFile(controller:Controller):
 
 async def main(controller:Controller):
     log.debug("starting controller main...")
-    controller.enable = True
     async with trio.open_nursery() as nursery:
         log.info("spawning loop")
         nursery.start_soon(controller.controlLoop, nursery)

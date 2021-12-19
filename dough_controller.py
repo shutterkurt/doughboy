@@ -39,6 +39,9 @@ class Controller:
         _log.debug(f"pid tunings ({self.pid.tunings})")
         self.pid.setpoint = self.setPoint
 
+        self.enable = config["enable"]
+        self.preheatAutoEnablePidAfter = config["preheatAutoEnablePidAfter"]
+
     def _turnOn(self):
         _log.debug("turning on...")
         if (self.relayState!="On"):
@@ -80,6 +83,7 @@ class Controller:
 
         # number of control loop cycles - for preheating
         self.cycleNum = 0
+        self.preheating = True
 
     @property
     def enable(self):
@@ -132,7 +136,7 @@ class Controller:
     
     def pid2level(self, pidOutput):
         # clamp to range 0-10
-        if (pidOutput <= 0):
+        if (pidOutput is None) or (pidOutput <= 0):
             level = 0
         elif (pidOutput >= 10):
             level = 10
@@ -145,7 +149,6 @@ class Controller:
                 level = 0
         _log.debug(f"pid2level pidOutput({pidOutput}) level ({level})")
         return level
-
 
     async def controlLoop(self, nursery):
         _log.info("starting control loop...")
@@ -170,18 +173,33 @@ class Controller:
             prevTemp = newTemp
 
             # call the pid to get new power level & set the output accordingly
+            # if the pid is disabled, the previous value is returned 
             level = self.pid2level(self.pid(newTemp))
             curP, curI, curD = self.pid.components
             _log.debug(f'pid components ({curP} {curI} {curD})')
 
-            # set power if enabled
-            if self.pid.auto_mode==False:
-                level = 0
-            elif (self.cycleNum < self.preheatCycles) and ((self.setPoint - newTemp) > self.preheatThreshold):
-                # override the output for preheating the heating pad
-                # if not already 'close' to the setpoint
+            # determine if preheating cycle is over
+            # either by the configured number of cycles OR if within a configured number of degrees
+            if (self.preheating) and (self.cycleNum <= self.preheatCycles) and ((self.setPoint - newTemp) > self.preheatThreshold):
+                # transition to normal mode from preheating
+                self.preheating = False
+                if self.preheatAutoEnablePidAfter:
+                    # if not already enabled, enables the pid to start and reset its internal sums
+                    self.pid.set_auto_mode(True)
+            
+            if (self.preheating):
+                # override the output for preheating the heating element + internals
                 _log.debug(f'preheating ({self.cycleNum}:{self.preheatCycles})')
                 level = self.preheatPowerLevel
+
+            # # set power if enabled
+            # if self.pid.auto_mode==False:
+            #     level = 0
+            # elif (self.cycleNum < self.preheatCycles) and ((self.setPoint - newTemp) > self.preheatThreshold):
+            #     # override the output for preheating the heating pad
+            #     # if not already 'close' to the setpoint
+            #     _log.debug(f'preheating ({self.cycleNum}:{self.preheatCycles})')
+            #     level = self.preheatPowerLevel
 
             self.setPower(level, nursery)
             _log.debug(f'pid output level ({level})')
@@ -197,6 +215,7 @@ class Controller:
             # publish the payload
             payload = {
                 "enabled": int(self.pid.auto_mode == True),
+                "preheating": int(self.preheating == True),
                 "curTemp": newTemp,
                 "setPoint": self.setPoint,
                 "level": level*10,   # to give percent power, not tenths power
