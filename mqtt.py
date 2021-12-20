@@ -33,7 +33,7 @@ def cleanup():
     global theClient
 
     # delay to make sure mqtt messages are published
-    time.sleep(2)
+    time.sleep(0.5)
     if (theClient):
         theClient.loop_stop()
 

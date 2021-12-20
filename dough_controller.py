@@ -126,7 +126,6 @@ class Controller:
         self._turnOff("turnOffLater")
 
     def setPower(self, level, nursery):
-        _log.info(f'setting power to ({level})')
         if (level == 0):
             self._turnOff("setPower")
         else:
@@ -169,7 +168,6 @@ class Controller:
                 prevTemp = newTemp
             deltaTemp = round(newTemp-prevTemp,4)
             errorTemp = round(self.setPoint - newTemp,4)
-            _log.info(f"{self.cycleNum}: curTemp= ({newTemp}) delta ({deltaTemp}) error ({errorTemp})")
             prevTemp = newTemp
 
             # call the pid to get new power level & set the output accordingly
@@ -180,7 +178,7 @@ class Controller:
 
             # determine if preheating cycle is over
             # either by the configured number of cycles OR if within a configured number of degrees
-            if (self.preheating) and (self.cycleNum <= self.preheatCycles) and ((self.setPoint - newTemp) > self.preheatThreshold):
+            if (self.preheating) and ((self.cycleNum > self.preheatCycles) or ((self.setPoint - newTemp) < self.preheatThreshold)):
                 # transition to normal mode from preheating
                 self.preheating = False
                 if self.preheatAutoEnablePidAfter:
@@ -189,7 +187,7 @@ class Controller:
             
             if (self.preheating):
                 # override the output for preheating the heating element + internals
-                _log.debug(f'preheating ({self.cycleNum}:{self.preheatCycles})')
+                _log.debug(f'preheating ({self.cycleNum}:{self.preheatCycles}) at level ({self.preheatPowerLevel})')
                 level = self.preheatPowerLevel
 
             # # set power if enabled
@@ -203,6 +201,9 @@ class Controller:
 
             self.setPower(level, nursery)
             _log.debug(f'pid output level ({level})')
+            enabledStat = "E" if self.enable else "-"
+            preheatStat = "P" if self.preheating else "-"
+            _log.info(f"{self.cycleNum}:{enabledStat}{preheatStat}({level:.1f}): T({newTemp:.2f})D({deltaTemp:.2f})E({errorTemp:.2f})")
 
             # update the screen
             # FIXME: look into why updateScreen takes ~2 seconds!!
