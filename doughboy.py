@@ -31,8 +31,10 @@ def readIni():
         "kP" : parser["CONTROL"].getfloat("kP"),
         "kI" : parser["CONTROL"].getfloat("kI"),
         "kD" : parser["CONTROL"].getfloat("kD"),
-        "enable" : parser["CONTROL"].getboolean("enable"),
-        "preheatAutoEnablePidAfter" : parser["CONTROL"].getboolean("preheatAutoEnablePidAfter")
+        "enablePID" : parser["CONTROL"].getboolean("enablePID"),
+        "enableOut" : parser["CONTROL"].getboolean("enableOut"),
+        "preheatAutoEnablePidAfter" : parser["CONTROL"].getboolean("preheatAutoEnablePidAfter"),
+        "initialIntegralSum" : parser["CONTROL"].getfloat("initialIntegralSum"),
     }
     log.debug("read ini file: " + json.dumps(config, indent=2, sort_keys=True))
 

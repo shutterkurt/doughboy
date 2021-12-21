@@ -39,8 +39,10 @@ class Controller:
         _log.debug(f"pid tunings ({self.pid.tunings})")
         self.pid.setpoint = self.setPoint
 
-        self.enable = config["enable"]
+        self.enablePID = config["enablePID"]
+        self.enableOut = config["enableOut"]
         self.preheatAutoEnablePidAfter = config["preheatAutoEnablePidAfter"]
+        self.initialIntegralSum = config["initialIntegralSum"]
 
     def _turnOn(self):
         _log.debug("turning on...")
@@ -86,12 +88,12 @@ class Controller:
         self.preheating = True
 
     @property
-    def enable(self):
+    def enablePID(self):
         """Enable the PID"""
         return self.pid.auto_mode
 
-    @ enable.setter
-    def enable(self, enable:bool):
+    @ enablePID.setter
+    def enablePID(self, enable:bool):
         # if off -> on, then reset the cycleNum
         if ((self.pid.auto_mode == False) and (enable == True)):
             self.cycleNum = 0
@@ -183,25 +185,19 @@ class Controller:
                 self.preheating = False
                 if self.preheatAutoEnablePidAfter:
                     # if not already enabled, enables the pid to start and reset its internal sums
-                    self.pid.set_auto_mode(True)
+                    self.pid.set_auto_mode(True, self.initialIntegralSum)
             
             if (self.preheating):
                 # override the output for preheating the heating element + internals
                 _log.debug(f'preheating ({self.cycleNum}:{self.preheatCycles}) at level ({self.preheatPowerLevel})')
                 level = self.preheatPowerLevel
 
-            # # set power if enabled
-            # if self.pid.auto_mode==False:
-            #     level = 0
-            # elif (self.cycleNum < self.preheatCycles) and ((self.setPoint - newTemp) > self.preheatThreshold):
-            #     # override the output for preheating the heating pad
-            #     # if not already 'close' to the setpoint
-            #     _log.debug(f'preheating ({self.cycleNum}:{self.preheatCycles})')
-            #     level = self.preheatPowerLevel
-
+            # override power if output is disabled
+            if self.enableOut is not True:
+                level = 0
             self.setPower(level, nursery)
             _log.debug(f'pid output level ({level})')
-            enabledStat = "E" if self.enable else "-"
+            enabledStat = "E" if self.enablePID else "-"
             preheatStat = "P" if self.preheating else "-"
             _log.info(f"{self.cycleNum}:{enabledStat}{preheatStat}({level:.1f}): T({newTemp:.2f})D({deltaTemp:.2f})E({errorTemp:.2f})")
 
@@ -215,7 +211,8 @@ class Controller:
 
             # publish the payload
             payload = {
-                "enabled": int(self.pid.auto_mode == True),
+                "enablePID": int(self.pid.auto_mode == True),
+                "enableOut": int(self.enableOut == True),
                 "preheating": int(self.preheating == True),
                 "curTemp": newTemp,
                 "setPoint": self.setPoint,
